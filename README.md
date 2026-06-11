@@ -107,11 +107,62 @@ phonebookapp/
 |-- docs/
 |   |-- API.md
 |   `-- phonebook-app.png
+|-- k8s/
+|   `-- phonebookapp.yaml
 |-- app.py
 |-- compose.yaml
 |-- Dockerfile
 `-- README.md
 ```
+
+## Executar no Kubernetes do GIRUS
+
+O manifesto cria um namespace próprio, um Deployment, um Service e um volume
+persistente de 1 GiB para o SQLite.
+
+Confirme que o contexto ativo é o cluster GIRUS:
+
+```bash
+kubectl config use-context kind-girus
+```
+
+Construa a imagem e carregue-a no nó do Kind:
+
+```bash
+docker build -t phonebookapp:1.0.0 .
+kind load docker-image phonebookapp:1.0.0 --name girus
+```
+
+Aplique todos os recursos:
+
+```bash
+kubectl apply -f k8s/phonebookapp.yaml
+kubectl rollout status deployment/phonebookapp -n phonebook-app
+```
+
+Publique o serviço localmente:
+
+```bash
+kubectl port-forward -n phonebook-app service/phonebookapp 3001:3000
+```
+
+Acesse [http://localhost:3001](http://localhost:3001).
+
+Verifique os recursos:
+
+```bash
+kubectl get all,pvc -n phonebook-app
+```
+
+Remova a aplicação e o banco:
+
+```bash
+kubectl delete -f k8s/phonebookapp.yaml
+```
+
+> O Deployment usa uma única réplica porque o SQLite armazena os dados em um
+> único arquivo. Para escalar horizontalmente, substitua o SQLite por um banco
+> como PostgreSQL.
 
 ## Licença
 

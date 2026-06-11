@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: phonebook-app
+  labels:
+    app.kubernetes.io/name: phonebookapp
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: phonebook-data
+  namespace: phonebook-app
+  labels:
+    app.kubernetes.io/name: phonebookapp
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phonebookapp
+  namespace: phonebook-app
+  labels:
+    app.kubernetes.io/name: phonebookapp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phonebookapp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phonebookapp
+    spec:
+      containers:
+        - name: phonebookapp
+          image: phonebookapp:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "3000"
+            - name: DATABASE_PATH
+              value: /data/contacts.db
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: phonebook-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phonebookapp
+  namespace: phonebook-app
+  labels:
+    app.kubernetes.io/name: phonebookapp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: phonebookapp
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
