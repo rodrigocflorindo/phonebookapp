@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Agenda simples para cadastro de nomes e telefones">
+    <title>Minha Agenda</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">CONTATOS</p>
+          <h1>Minha Agenda</h1>
+          <p class="subtitle">Cadastre e organize seus contatos em um só lugar.</p>
+        </div>
+        <div class="contact-count" aria-live="polite">
+          <strong id="contact-count">0</strong>
+          <span>contatos</span>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <article class="card form-card">
+          <div class="card-heading">
+            <span class="icon-box" aria-hidden="true">+</span>
+            <div>
+              <h2 id="form-title">Novo contato</h2>
+              <p>Preencha os dados abaixo.</p>
+            </div>
+          </div>
+
+          <form id="contact-form" novalidate>
+            <input id="contact-id" type="hidden">
+
+            <label for="name">Nome</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              minlength="2"
+              maxlength="80"
+              placeholder="Ex.: Maria Silva"
+              autocomplete="name"
+              required
+            >
+
+            <label for="phone">Telefone</label>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              minlength="8"
+              maxlength="20"
+              placeholder="Ex.: (11) 99999-9999"
+              autocomplete="tel"
+              required
+            >
+
+            <p id="form-message" class="form-message" role="alert"></p>
+
+            <div class="form-actions">
+              <button class="button primary" type="submit">
+                <span id="submit-label">Cadastrar contato</span>
+              </button>
+              <button id="cancel-button" class="button secondary hidden" type="button">
+                Cancelar edição
+              </button>
+            </div>
+          </form>
+        </article>
+
+        <article class="card contacts-card">
+          <div class="list-header">
+            <div>
+              <h2>Seus contatos</h2>
+              <p>Selecione um contato para editar ou excluir.</p>
+            </div>
+            <input id="search" type="search" placeholder="Buscar contato" aria-label="Buscar contato">
+          </div>
+
+          <div id="loading" class="state-message">Carregando contatos...</div>
+          <div id="empty-state" class="empty-state hidden">
+            <div class="empty-icon" aria-hidden="true">☎</div>
+            <h3>Nenhum contato cadastrado</h3>
+            <p>Use o formulário para adicionar o primeiro.</p>
+          </div>
+          <ul id="contact-list" class="contact-list" aria-live="polite"></ul>
+        </article>
+      </section>
+    </main>
+
+    <template id="contact-template">
+      <li class="contact-item">
+        <div class="avatar" aria-hidden="true"></div>
+        <div class="contact-info">
+          <strong class="contact-name"></strong>
+          <a class="contact-phone"></a>
+        </div>
+        <div class="item-actions">
+          <button class="icon-button edit-button" type="button" aria-label="Editar contato">Editar</button>
+          <button class="icon-button delete-button" type="button" aria-label="Excluir contato">Excluir</button>
+        </div>
+      </li>
+    </template>
+  </body>
+</html>

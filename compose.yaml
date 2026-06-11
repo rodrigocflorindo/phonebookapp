@@ -1,0 +1,12 @@
+services:
+  phonebook:
+    build: .
+    container_name: phonebook-app
+    ports:
+      - "3001:3000"
+    volumes:
+      - phonebook-data:/data
+    restart: unless-stopped
+
+volumes:
+  phonebook-data:
