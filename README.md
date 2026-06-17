@@ -9,6 +9,7 @@ Agenda web simples para cadastrar, pesquisar, editar e excluir contatos.
 - Cadastro de nome e telefone
 - Pesquisa instantânea de contatos
 - Edição e exclusão de registros
+- Sistema de feedback para usuários
 - Validação dos dados no frontend e backend
 - Persistência em banco SQLite
 - Interface responsiva
@@ -93,6 +94,7 @@ permanecem disponíveis após reiniciar ou recriar o container.
 | `POST` | `/api/contacts` | Cria um contato |
 | `PUT` | `/api/contacts/{id}` | Atualiza um contato |
 | `DELETE` | `/api/contacts/{id}` | Exclui um contato |
+| `POST` | `/api/feedback` | Envia feedback sobre a aplicação |
 
 Consulte os exemplos em [docs/API.md](docs/API.md).
 
@@ -147,6 +149,27 @@ kubectl port-forward -n phonebook-app service/phonebookapp 3001:3000
 ```
 
 Acesse [http://localhost:3001](http://localhost:3001).
+
+## Traces no Datadog APM
+
+O backend envia traces com o serviço `phonebookapp`, ambiente `local` e versão
+`1.1.1`. O manifesto usa o IP do nó na variável `DD_AGENT_HOST` e a porta APM
+`8126` do Datadog Agent.
+
+Depois de gerar tráfego na aplicação, abra **APM > Traces** no Datadog e filtre:
+
+```text
+service:phonebookapp env:local
+```
+
+Para confirmar a recepção diretamente no cluster:
+
+```bash
+kubectl exec -n default daemonset/datadog-agent -c agent -- agent status
+```
+
+Na seção `APM Agent`, o contador `Traces` deve ser maior que zero. As chamadas
+de `/api/health` não são rastreadas para evitar ruído das probes.
 
 Verifique os recursos:
 

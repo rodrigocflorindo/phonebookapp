@@ -92,6 +92,46 @@
       </section>
     </main>
 
+    <button id="feedback-button" class="feedback-button" type="button" aria-label="Enviar feedback">
+      💬 Feedback
+    </button>
+
+    <dialog id="feedback-modal" class="feedback-modal">
+      <div class="modal-header">
+        <h2>Enviar Feedback</h2>
+        <button id="close-modal" class="icon-button" type="button" aria-label="Fechar">×</button>
+      </div>
+      <form id="feedback-form" novalidate>
+        <label for="feedback-email">E-mail (opcional)</label>
+        <input
+          id="feedback-email"
+          name="email"
+          type="email"
+          maxlength="100"
+          placeholder="Ex.: usuario@email.com"
+          autocomplete="email"
+        >
+
+        <label for="feedback-message">Mensagem</label>
+        <textarea
+          id="feedback-message"
+          name="message"
+          rows="5"
+          minlength="10"
+          maxlength="500"
+          placeholder="Compartilhe suas sugestões ou problemas..."
+          required
+        ></textarea>
+
+        <p id="feedback-form-message" class="form-message" role="alert"></p>
+
+        <div class="form-actions">
+          <button class="button primary" type="submit">Enviar feedback</button>
+          <button class="button secondary" type="button" id="cancel-feedback">Cancelar</button>
+        </div>
+      </form>
+    </dialog>
+
     <template id="contact-template">
       <li class="contact-item">
         <div class="avatar" aria-hidden="true"></div>

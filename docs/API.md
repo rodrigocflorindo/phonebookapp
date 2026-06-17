@@ -44,11 +44,34 @@ curl -X PUT http://localhost:3001/api/contacts/1 \
 curl -X DELETE http://localhost:3001/api/contacts/1
 ```
 
+## Enviar feedback
+
+```bash
+curl -X POST http://localhost:3001/api/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"email":"usuario@example.com","message":"Aplicativo muito útil!"}'
+```
+
+Para feedback anônimo, omita o e-mail ou envie `null`:
+
+```bash
+curl -X POST http://localhost:3001/api/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"email":null,"message":"Sugestão de melhoria: adicionar filtros avançados."}'
+```
+
 ## Validações
+
+### Contatos
 
 - `name`: obrigatório, entre 2 e 80 caracteres
 - `phone`: obrigatório, entre 8 e 20 caracteres
 - O telefone aceita números, espaços e os caracteres `+`, `(`, `)`, `-`
+
+### Feedback
+
+- `email`: opcional, até 100 caracteres, deve ser um e-mail válido
+- `message`: obrigatório, entre 10 e 500 caracteres
 
 Erros de validação retornam HTTP `400`:
 

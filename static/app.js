@@ -129,3 +129,69 @@ form.addEventListener("submit", async (event) => {
 cancelButton.addEventListener("click", () => resetForm());
 searchInput.addEventListener("input", renderContacts);
 loadContacts();
+
+// Feedback functionality
+const feedbackButton = document.querySelector("#feedback-button");
+const feedbackModal = document.querySelector("#feedback-modal");
+const feedbackForm = document.querySelector("#feedback-form");
+const feedbackEmailInput = document.querySelector("#feedback-email");
+const feedbackMessageInput = document.querySelector("#feedback-message");
+const feedbackFormMessage = document.querySelector("#feedback-form-message");
+const closeModalButton = document.querySelector("#close-modal");
+const cancelFeedbackButton = document.querySelector("#cancel-feedback");
+
+function showFeedbackMessage(message, type = "error") {
+  feedbackFormMessage.textContent = message;
+  feedbackFormMessage.classList.toggle("success", type === "success");
+}
+
+function resetFeedbackForm() {
+  feedbackForm.reset();
+  showFeedbackMessage("");
+}
+
+feedbackButton.addEventListener("click", () => {
+  feedbackModal.showModal();
+  feedbackMessageInput.focus();
+});
+
+closeModalButton.addEventListener("click", () => {
+  feedbackModal.close();
+  resetFeedbackForm();
+});
+
+cancelFeedbackButton.addEventListener("click", () => {
+  feedbackModal.close();
+  resetFeedbackForm();
+});
+
+feedbackForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!feedbackForm.checkValidity()) {
+    feedbackForm.reportValidity();
+    return;
+  }
+
+  const email = feedbackEmailInput.value.trim();
+  const message = feedbackMessageInput.value.trim();
+
+  const response = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email || null, message }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    showFeedbackMessage(result.error || "Não foi possível enviar o feedback.");
+    return;
+  }
+
+  showFeedbackMessage("Feedback enviado com sucesso! Obrigado pela sua contribuição.", "success");
+  setTimeout(() => {
+    feedbackModal.close();
+    resetFeedbackForm();
+  }, 2000);
+});
