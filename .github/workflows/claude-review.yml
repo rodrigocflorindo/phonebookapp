@@ -31,7 +31,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install Anthropic SDK
-        run: pip install anthropic
+        run: pip install 'anthropic==0.69.0'
 
       - name: Run Claude Code Review
         env:
@@ -47,6 +47,10 @@ jobs:
           # Read the PR diff
           with open('pr_diff.txt', 'r') as f:
               diff = f.read()
+
+          if not diff.strip():
+              print("No diff content to review. Skipping.")
+              raise SystemExit(0)
 
           # Create Claude client
           api_key = os.environ.get('ANTHROPIC_API_KEY')
