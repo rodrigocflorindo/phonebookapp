@@ -85,4 +85,3 @@ jobs:
           ], env=os.environ)
 
           print("✅ Review posted successfully!")
-          EOF
