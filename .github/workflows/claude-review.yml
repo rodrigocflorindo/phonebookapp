@@ -82,6 +82,7 @@ jobs:
           subprocess.run([
               'gh', 'pr', 'comment', pr_number,
               '--body', f"## 🤖 Claude Code Review\n\n{review_comment}"
-          ], env=os.environ)
+          ], env=os.environ, check=True)
 
           print("✅ Review posted successfully!")
+          EOF
