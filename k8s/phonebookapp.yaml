@@ -45,12 +45,14 @@ spec:
         app.kubernetes.io/name: phonebookapp
         tags.datadoghq.com/env: local
         tags.datadoghq.com/service: phonebookapp
-        tags.datadoghq.com/version: 1.1.1
+        tags.datadoghq.com/version: 1.1.2
     spec:
       containers:
         - name: phonebookapp
-          image: phonebookapp:1.1.1
+          image: phonebookapp:1.1.2
           imagePullPolicy: IfNotPresent
+          command: ["ddtrace-run"]
+          args: ["python", "app.py"]
           ports:
             - name: http
               containerPort: 3000
