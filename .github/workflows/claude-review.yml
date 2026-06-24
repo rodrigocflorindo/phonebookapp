@@ -1,34 +1,88 @@
-  name: Claude Code Review
+name: Claude Code Review
 
-  on:
-    pull_request:
-      types: [opened, synchronize, reopened]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-  jobs:
-    claude-review:
-      runs-on: ubuntu-latest
-      permissions:
-        contents: read
-        pull-requests: write
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        - name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: '20'
+      - name: Get PR diff
+        id: diff
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
+          echo "diff_file=pr_diff.txt" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Install Claude Code
-          run: npm install -g @anthropics/claude-code
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-        - name: Run Claude Code Review
-          env:
-            ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          run: |
-            # Review the PR changes
-            claude code-review --pr ${{ github.event.pull_request.number }} --comment
+      - name: Install Anthropic SDK
+        run: pip install anthropic
+
+      - name: Run Claude Code Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import anthropic
+          import subprocess
+
+          # Read the PR diff
+          with open('pr_diff.txt', 'r') as f:
+              diff = f.read()
+
+          # Create Claude client
+          client = anthropic.Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
+
+          # Request code review from Claude
+          message = client.messages.create(
+              model="claude-sonnet-4-20250514",
+              max_tokens=4096,
+              messages=[{
+                  "role": "user",
+                  "content": f"""Review this pull request diff and provide constructive feedback.
+
+          Focus on:
+          - Code quality and best practices
+          - Potential bugs or issues
+          - Security concerns
+          - Performance improvements
+          - Suggestions for better implementation
+
+          PR Diff:
+          ```
+          {diff}
+          ```
+
+          Provide your review in a clear, helpful format."""
+              }]
+          )
+
+          review_comment = message.content[0].text
+
+          # Post review as PR comment
+          pr_number = os.environ['PR_NUMBER']
+          subprocess.run([
+              'gh', 'pr', 'comment', pr_number,
+              '--body', f"## 🤖 Claude Code Review\n\n{review_comment}"
+          ], env=os.environ)
+
+          print("✅ Review posted successfully!")
+          EOF
