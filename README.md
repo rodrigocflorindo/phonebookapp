@@ -1,6 +1,6 @@
 # Phonebook App
 
-Aplicação web moderna para gerenciamento de contatos com interface responsiva, validação robusta e observabilidade integrada.
+Aplicação web moderna para gerenciamento de contatos com interface responsiva, validação robusta e observabilidade integrada com Prometheus e Grafana.
 
 ![Tela do Phonebook App](docs/phonebook-app.png)
 
@@ -28,23 +28,23 @@ Aplicação web moderna para gerenciamento de contatos com interface responsiva,
 - 📧 **Feedback**: email opcional, mensagem de 10-500 caracteres
 
 ### Observabilidade
-- 📈 **Datadog APM** para rastreamento distribuído
-- 🔍 **Traces detalhados** de requisições HTTP e queries SQL
-- 🏷️ **Tags personalizadas**: método, URL, status code, client IP
-- ⚕️ **Health check** excluído do tracing para reduzir ruído
-- 📊 **Resource naming** padronizado para fácil análise no APM
+- 📈 **Prometheus** para coleta de métricas
+- 📊 **Grafana** para visualização com dashboards pré-configurados
+- 🔍 **Métricas detalhadas** de requisições HTTP, latência e operações de banco de dados
+- ⚕️ **Health check** e endpoint `/metrics` para monitoramento
+- 📊 **Dashboards**: Phonebook App Metrics e Kubernetes Cluster Health
 
 ## Tecnologias
 
 - **Frontend:** HTML5, CSS3 (Grid, Flexbox, Animations), Vanilla JavaScript (ES6+)
 - **Backend:** Python 3.12 com `http.server` e threading
 - **Banco de dados:** SQLite 3 com row factory
-- **Observabilidade:** Datadog APM via `ddtrace`
-- **Infraestrutura:** Docker, Docker Compose, Kubernetes
+- **Observabilidade:** Prometheus + Grafana
+- **Infraestrutura:** Docker, Docker Compose, Kubernetes (Kind)
 
 ## Arquitetura
 
-A aplicação usa uma arquitetura simples e eficiente com backend Python servindo tanto arquivos estáticos quanto API REST. O tracing APM é injetado via decorator customizado que instrumenta todas as requisições HTTP e queries SQLite.
+A aplicação usa uma arquitetura simples e eficiente com backend Python servindo tanto arquivos estáticos quanto API REST. As métricas são expostas no formato Prometheus para monitoramento.
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -58,9 +58,10 @@ A aplicação usa uma arquitetura simples e eficiente com backend Python servind
 ┌─────────────────────────────────────────────────────────┐
 │           Aplicação Python (ThreadingHTTPServer)        │
 │  ┌──────────────────────────────────────────────────┐  │
-│  │  @traced_request decorator (Datadog APM)         │  │
-│  │  ├── Span tags: method, url, status, client_ip  │  │
-│  │  └── SQL queries auto-traced via patch()        │  │
+│  │  Prometheus Metrics Instrumentation              │  │
+│  │  ├── HTTP request counter & duration histogram   │  │
+│  │  ├── In-progress requests gauge                  │  │
+│  │  └── Database operations counter                 │  │
 │  └──────────────────────────────────────────────────┘  │
 │                                                          │
 │  ┌───────────────┐  ┌──────────────────────────────┐  │
@@ -71,6 +72,7 @@ A aplicação usa uma arquitetura simples e eficiente com backend Python servind
 │  └───────────────┘  │ PUT    /api/contacts/{id}    │  │
 │                     │ DELETE /api/contacts/{id}    │  │
 │                     │ POST   /api/feedback         │  │
+│                     │ GET    /metrics (Prometheus) │  │
 │                     └──────────────────────────────┘  │
 └────────────────────┬────────────────────────────────────┘
                      │
@@ -95,27 +97,30 @@ A aplicação usa uma arquitetura simples e eficiente com backend Python servind
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│                   Datadog APM                           │
-│  Serviço: phonebookapp                                  │
-│  Ambiente: local                                        │
-│  Versão: 1.1.1                                          │
+│               Prometheus + Grafana                      │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ Prometheus: coleta métricas a cada 15s          │  │
+│  │ Grafana: dashboards de visualização             │  │
+│  │ - Phonebook App Metrics                         │  │
+│  │ - Kubernetes Cluster Health                     │  │
+│  └──────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ### Decisões Arquiteturais
 
 - **Single-threaded HTTP server com threading**: usa `ThreadingHTTPServer` para lidar com múltiplas requisições concorrentes
-- **Decorator pattern para tracing**: `@traced_request` injeta spans APM sem poluir a lógica de negócio
-- **Health check exclusion**: `/api/health` não gera traces para evitar ruído de probes do Kubernetes
-- **Resource naming normalizado**: IDs dinâmicos são substituídos por `{id}` para agrupamento de traces
+- **Decorator pattern para métricas**: `@traced_request` instrumenta requisições sem poluir a lógica de negócio
+- **Health check e metrics exclusion**: `/api/health` e `/metrics` não geram métricas detalhadas para evitar ruído
+- **Resource naming normalizado**: IDs dinâmicos são substituídos por `{id}` para agrupamento de métricas
 - **SQLite com row factory**: retorna dicionários em vez de tuplas para fácil serialização JSON
 
 ## Pré-requisitos
 
 - Docker Desktop
-- Docker Compose
+- Docker Compose (ou Kind para Kubernetes)
 
-## Executar
+## Executar Localmente
 
 Clone o repositório:
 
@@ -128,12 +133,6 @@ Construa e inicie o container:
 
 ```bash
 docker compose up -d --build
-```
-
-Em instalações que usam o executável clássico:
-
-```bash
-docker-compose up -d --build
 ```
 
 Acesse [http://localhost:3001](http://localhost:3001).
@@ -155,70 +154,17 @@ docker compose down -v
 O volume `phonebook-data` armazena o arquivo `/data/contacts.db`. Os contatos
 permanecem disponíveis após reiniciar ou recriar o container.
 
-## Interface do Usuário
-
-### Layout e Componentes
-
-A interface é dividida em duas colunas principais em desktop e empilhada em mobile:
-
-#### 1. **Hero Section** (Topo da página)
-- Título "Minha Agenda" com eyebrow "CONTATOS"
-- Subtitle explicativa
-- **Contador de contatos** atualizado em tempo real
-
-#### 2. **Card de Formulário** (Coluna esquerda)
-- Header com ícone `+` e título dinâmico ("Novo contato" / "Editar contato")
-- Campos:
-  - **Nome**: input com placeholder, min 2 / max 80 caracteres
-  - **Telefone**: input type tel com placeholder, min 8 / max 20 caracteres
-- Mensagem de feedback (sucesso/erro)
-- Botões:
-  - **Cadastrar/Atualizar** (primary button)
-  - **Cancelar edição** (secondary, aparece apenas em modo edição)
-
-#### 3. **Card de Lista de Contatos** (Coluna direita)
-- **Campo de busca** com filtragem instantânea
-- **Estados da lista**:
-  - **Loading**: "Carregando contatos..."
-  - **Empty state**: ícone de telefone + mensagem quando vazio
-  - **Lista de contatos**: cada item contém:
-    - Avatar colorido gerado automaticamente
-    - Nome em destaque
-    - Telefone clicável (link `tel:`)
-    - Botões de **Editar** e **Excluir**
-
-#### 4. **Modal de Feedback** (Overlay)
-- Botão flutuante `💬 Feedback` no canto inferior direito
-- Modal com:
-  - Header com título e botão fechar
-  - Campo email (opcional)
-  - Campo mensagem (textarea, obrigatório)
-  - Botões Enviar/Cancelar
-
-### Características Visuais
-
-- **Paleta de cores**: tons de azul (#2563eb primary), cinza neutro, fundos claros
-- **Typography**: sistema de fontes nativas (sans-serif stack)
-- **Espaçamento**: 8px grid system
-- **Animações**:
-  - Fade in dos contatos ao carregar
-  - Hover effects com elevação em cards
-  - Transições suaves de 200ms
-  - Scale up em botões ao hover
-- **Responsividade**:
-  - Desktop (>768px): layout em grid 2 colunas
-  - Mobile (<768px): layout empilhado, cards full-width
-
 ## API REST
 
-| Método | Endpoint | Descrição | Traced |
-| --- | --- | --- | --- |
-| `GET` | `/api/health` | Verifica a saúde da aplicação | ❌ |
-| `GET` | `/api/contacts` | Lista todos os contatos ordenados por nome | ✅ |
-| `POST` | `/api/contacts` | Cria um novo contato | ✅ |
-| `PUT` | `/api/contacts/{id}` | Atualiza um contato existente | ✅ |
-| `DELETE` | `/api/contacts/{id}` | Exclui um contato | ✅ |
-| `POST` | `/api/feedback` | Envia feedback sobre a aplicação | ✅ |
+| Método | Endpoint | Descrição |
+| --- | --- | --- |
+| `GET` | `/api/health` | Verifica a saúde da aplicação |
+| `GET` | `/api/contacts` | Lista todos os contatos ordenados por nome |
+| `POST` | `/api/contacts` | Cria um novo contato |
+| `PUT` | `/api/contacts/{id}` | Atualiza um contato existente |
+| `DELETE` | `/api/contacts/{id}` | Exclui um contato |
+| `POST` | `/api/feedback` | Envia feedback sobre a aplicação |
+| `GET` | `/metrics` | Expõe métricas no formato Prometheus |
 
 ### Validação de Dados
 
@@ -238,30 +184,29 @@ Consulte exemplos de uso em [docs/API.md](docs/API.md).
 
 ```text
 phonebookapp/
-├── app.py                    # Servidor HTTP Python com API REST e tracing APM
-├── requirements.txt          # Dependências Python (ddtrace)
-├── test_app.py              # Suite de testes unitários
-├── Dockerfile               # Build multi-stage otimizado
-├── compose.yaml             # Docker Compose com volume persistente
-├── CLAUDE.md                # Documentação para Claude Code
-├── README.md                # Este arquivo
-├── static/                  # Frontend estático
-│   ├── index.html          # Interface HTML5 semântica
-│   ├── app.js              # Lógica JavaScript (fetch API, DOM manipulation)
-│   └── styles.css          # Estilos responsivos com Grid/Flexbox
-├── docs/                    # Documentação adicional
-│   ├── API.md              # Exemplos de uso da API REST
-│   └── phonebook-app.png   # Screenshot da aplicação
-└── k8s/                     # Manifests Kubernetes
-    └── phonebookapp.yaml   # Namespace, PVC, Deployment, Service
+├── app.py                       # Servidor HTTP Python com API REST e métricas
+├── requirements.txt             # Dependências Python (prometheus-client)
+├── test_app.py                  # Suite de testes unitários
+├── Dockerfile                   # Build multi-stage otimizado
+├── compose.yaml                 # Docker Compose com volume persistente
+├── CLAUDE.md                    # Documentação para Claude Code
+├── README.md                    # Este arquivo
+├── static/                      # Frontend estático
+│   ├── index.html              # Interface HTML5 semântica
+│   ├── app.js                  # Lógica JavaScript (fetch API, DOM manipulation)
+│   └── styles.css              # Estilos responsivos com Grid/Flexbox
+├── docs/                        # Documentação adicional
+│   ├── API.md                  # Exemplos de uso da API REST
+│   └── phonebook-app.png       # Screenshot da aplicação
+└── k8s/                         # Manifests Kubernetes
+    ├── phonebookapp.yaml       # Namespace, PVC, Deployment, Service
+    └── monitoring/              # Stack de monitoramento
+        ├── prometheus.yaml     # Prometheus server
+        ├── grafana.yaml        # Grafana server
+        ├── grafana-dashboards.yaml  # Dashboards pré-configurados
+        ├── kube-state-metrics.yaml  # Métricas do cluster K8s
+        └── node-exporter.yaml  # Métricas dos nodes
 ```
-
-### Principais Arquivos
-
-- **app.py** (200+ linhas): servidor HTTP com decorator de tracing, handlers CRUD, validação
-- **static/app.js** (200+ linhas): gerenciamento de estado, renderização, busca em tempo real
-- **static/styles.css** (250+ linhas): design system completo com variáveis CSS e media queries
-- **test_app.py**: 12 testes cobrindo CRUD, validação e persistência
 
 ## Testes
 
@@ -287,19 +232,18 @@ Todos os testes usam um banco SQLite em memória para isolamento.
 | --- | --- | --- |
 | `PORT` | Porta do servidor HTTP | `3000` |
 | `DATABASE_PATH` | Caminho do arquivo SQLite | `data/contacts.db` |
-| `DD_AGENT_HOST` | Hostname do Datadog Agent | `localhost` |
-| `DD_ENV` | Environment tag (APM) | `local` |
-| `DD_SERVICE` | Nome do serviço (APM) | `phonebookapp` |
-| `DD_VERSION` | Versão do serviço (APM) | `1.1.1` |
-| `DD_LOGS_INJECTION` | Injetar trace IDs em logs | `true` |
-| `DD_TRACE_SAMPLE_RATE` | Taxa de amostragem (0.0-1.0) | `1.0` |
 
-No Docker Compose, `DD_AGENT_HOST=host.docker.internal` permite que o container envie traces para o Agent rodando no host.
-
-## Executar no Kubernetes do GIRUS
+## Executar no Kubernetes (Kind)
 
 O manifesto cria um namespace próprio, um Deployment, um Service e um volume
 persistente de 1 GiB para o SQLite.
+
+### Pré-requisitos
+
+- [Kind](https://kind.sigs.k8s.io/) instalado
+- Cluster Kind chamado `girus`
+
+### Deploy da Aplicação
 
 Confirme que o contexto ativo é o cluster GIRUS:
 
@@ -310,8 +254,8 @@ kubectl config use-context kind-girus
 Construa a imagem e carregue-a no nó do Kind:
 
 ```bash
-docker build -t phonebookapp:1.0.0 .
-kind load docker-image phonebookapp:1.0.0 --name girus
+docker build -t phonebookapp:1.3.0 .
+kind load docker-image phonebookapp:1.3.0 --name girus
 ```
 
 Aplique todos os recursos:
@@ -321,88 +265,125 @@ kubectl apply -f k8s/phonebookapp.yaml
 kubectl rollout status deployment/phonebookapp -n phonebook-app
 ```
 
-Publique o serviço localmente:
+### Deploy do Stack de Monitoramento
+
+Instale Prometheus, Grafana e exporters de métricas:
 
 ```bash
-kubectl port-forward -n phonebook-app service/phonebookapp 3001:3000
+# Prometheus
+kubectl apply -f k8s/monitoring/prometheus.yaml
+
+# Grafana com dashboards
+kubectl apply -f k8s/monitoring/grafana.yaml
+kubectl apply -f k8s/monitoring/grafana-dashboards.yaml
+
+# Exporters de métricas do Kubernetes
+kubectl apply -f k8s/monitoring/kube-state-metrics.yaml
+kubectl apply -f k8s/monitoring/node-exporter.yaml
+
+# Aguarde todos os deployments
+kubectl rollout status deployment/prometheus -n monitoring
+kubectl rollout status deployment/grafana -n monitoring
+kubectl rollout status deployment/kube-state-metrics -n monitoring
 ```
 
-Acesse [http://localhost:3001](http://localhost:3001).
+### Acessar os Serviços
 
-## Observabilidade com Datadog APM
+Crie port-forwards para acessar localmente:
 
-### Configuração de Traces
-
-O backend automaticamente envia traces distribuídos para o Datadog APM usando a biblioteca `ddtrace`. A instrumentação é feita via:
-
-1. **Patch automático do SQLite**: `patch(sqlite3=True)` no início do app.py
-2. **Decorator customizado**: `@traced_request` injeta spans em cada requisição HTTP
-
-### Tags e Metadata
-
-Cada trace contém as seguintes tags:
-
-| Tag | Exemplo | Descrição |
-| --- | --- | --- |
-| `service` | `phonebookapp` | Nome do serviço |
-| `env` | `local` | Ambiente (local/dev/prod) |
-| `version` | `1.1.1` | Versão da aplicação |
-| `http.method` | `POST` | Método HTTP |
-| `http.url` | `/api/contacts` | Path da requisição |
-| `http.status_code` | `201` | Status code da resposta |
-| `http.client_ip` | `172.17.0.1` | IP do cliente |
-| `resource` | `POST /api/contacts` | Nome do recurso (agrupado) |
-
-### Resource Naming
-
-Os IDs dinâmicos são normalizados para facilitar agrupamento:
-- `GET /api/contacts/123` → `GET /api/contacts/{id}`
-- `PUT /api/contacts/456` → `PUT /api/contacts/{id}`
-- `DELETE /api/contacts/789` → `DELETE /api/contacts/{id}`
-
-**Nota**: `/api/health` **não é rastreado** para evitar ruído das health probes do Kubernetes.
-
-### Visualizar Traces no Datadog
-
-Após gerar tráfego na aplicação, acesse **APM > Traces** no Datadog e filtre:
-
-```text
-service:phonebookapp env:local
-```
-
-Você verá:
-- **Flame graphs** mostrando hierarquia de spans
-- **Latência** de cada operação (HTTP request + SQL queries)
-- **Throughput** e taxa de erro por endpoint
-- **Dependências** entre serviços (service map)
-
-### Verificar Recepção de Traces
-
-**No Kubernetes**:
 ```bash
-kubectl exec -n default daemonset/datadog-agent -c agent -- agent status
+# Phonebook App
+kubectl port-forward -n phonebook-app service/phonebookapp 3001:3000 &
+
+# Prometheus
+kubectl port-forward -n monitoring service/prometheus 9090:9090 &
+
+# Grafana
+kubectl port-forward -n monitoring service/grafana 3002:3000 &
 ```
 
-Verifique a seção `APM Agent` → contador `Traces` deve ser > 0.
+Acesse:
+- **Phonebook App**: [http://localhost:3001](http://localhost:3001)
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)
+- **Grafana**: [http://localhost:3002](http://localhost:3002) (usuário: `admin`, senha: `admin`)
 
-**No Docker Compose**:
-O container envia traces para `host.docker.internal:8126`. Verifique se o Datadog Agent está rodando no host e ouvindo na porta 8126.
-
-Verifique os recursos:
+### Verificar Recursos
 
 ```bash
 kubectl get all,pvc -n phonebook-app
+kubectl get all,pvc -n monitoring
 ```
 
-Remova a aplicação e o banco:
+### Remover
 
 ```bash
 kubectl delete -f k8s/phonebookapp.yaml
+kubectl delete -f k8s/monitoring/
 ```
 
 > O Deployment usa uma única réplica porque o SQLite armazena os dados em um
 > único arquivo. Para escalar horizontalmente, substitua o SQLite por um banco
 > como PostgreSQL.
+
+## Observabilidade com Prometheus e Grafana
+
+### Métricas Disponíveis
+
+A aplicação expõe as seguintes métricas no endpoint `/metrics`:
+
+| Métrica | Tipo | Descrição |
+| --- | --- | --- |
+| `phonebookapp_http_requests_total` | Counter | Total de requisições HTTP por método, endpoint e status |
+| `phonebookapp_http_request_duration_seconds` | Histogram | Latência de requisições HTTP |
+| `phonebookapp_http_requests_in_progress` | Gauge | Requisições HTTP em processamento |
+| `phonebookapp_db_operations_total` | Counter | Total de operações no banco de dados |
+
+### Dashboards do Grafana
+
+Dois dashboards vêm pré-configurados:
+
+#### 1. **Phonebook App Metrics**
+- HTTP Request Rate (req/s)
+- HTTP Request Duration (p95 e p50)
+- HTTP Requests In Progress
+- Database Operations Rate
+- HTTP Status Codes
+- Error Rate (4xx + 5xx)
+
+#### 2. **Kubernetes Cluster Health**
+- Cluster Overview (Total Nodes)
+- Total Pods / Running Pods / Failed Pods
+- CPU Usage by Node
+- Memory Usage by Node
+- Pods by Namespace
+- Pod Restarts (Last 5m)
+- Node Disk Usage
+- Network I/O (RX/TX)
+- Pod Status by Phase
+- Deployments - Available vs Desired Replicas
+
+### Consultar Métricas
+
+**Via Prometheus**:
+```bash
+# Total de requisições
+curl 'http://localhost:9090/api/v1/query?query=sum(phonebookapp_http_requests_total)'
+
+# Taxa de requisições (últimos 5 minutos)
+curl 'http://localhost:9090/api/v1/query?query=rate(phonebookapp_http_requests_total[5m])'
+```
+
+**Diretamente da aplicação**:
+```bash
+curl http://localhost:3001/metrics
+```
+
+### Configuração do Prometheus
+
+O Prometheus está configurado para:
+- **Scrape interval**: 15 segundos
+- **Auto-discovery**: descobre automaticamente pods com a anotação `prometheus.io/scrape: "true"`
+- **Retenção**: métricas são armazenadas em PVC de 10Gi
 
 ## Limitações e Considerações
 
@@ -440,6 +421,8 @@ Melhorias futuras planejadas:
 - [ ] Internacionalização (i18n) para múltiplos idiomas
 - [ ] Notificações push para lembretes de aniversário
 - [ ] Integração com serviços de notificação para feedback
+- [ ] Alertas no Grafana para métricas críticas
+- [ ] Distributed tracing com OpenTelemetry
 
 ## Licença
 
@@ -447,4 +430,4 @@ Distribuído sob a licença MIT. Consulte [LICENSE](LICENSE).
 
 ---
 
-**Desenvolvido com ❤️ usando Python, Vanilla JS e Datadog APM**
+**Desenvolvido com ❤️ usando Python, Vanilla JS, Prometheus e Grafana**

@@ -4,15 +4,6 @@ services:
     container_name: phonebook-app
     ports:
       - "3001:3000"
-    environment:
-      DD_AGENT_HOST: host.docker.internal
-      DD_ENV: local
-      DD_SERVICE: phonebookapp
-      DD_VERSION: 1.1.1
-      DD_LOGS_INJECTION: "true"
-      DD_TRACE_SAMPLE_RATE: "1.0"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - phonebook-data:/data
     restart: unless-stopped

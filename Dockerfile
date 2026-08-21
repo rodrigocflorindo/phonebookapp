@@ -15,4 +15,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["ddtrace-run", "python", "app.py"]
+CMD ["python", "app.py"]

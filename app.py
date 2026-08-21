@@ -8,10 +8,32 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ddtrace import patch, tracer
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
+# Prometheus metrics
+http_requests_total = Counter(
+    'phonebookapp_http_requests_total',
+    'Total HTTP requests',
+    ['method', 'endpoint', 'status']
+)
 
-patch(sqlite3=True)
+http_request_duration_seconds = Histogram(
+    'phonebookapp_http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
+http_requests_in_progress = Gauge(
+    'phonebookapp_http_requests_in_progress',
+    'HTTP requests currently being processed',
+    ['method', 'endpoint']
+)
+
+db_operations_total = Counter(
+    'phonebookapp_db_operations_total',
+    'Total database operations',
+    ['operation', 'table']
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -35,18 +57,23 @@ def traced_request(handler):
     @wraps(handler)
     def wrapper(self, *args, **kwargs):
         path = urlparse(self.path).path
-        if path == "/api/health":
+        method = self.command
+        endpoint = request_resource(method, path)
+
+        # Skip tracing and detailed metrics for health checks and metrics endpoint
+        if path in ["/api/health", "/metrics"]:
             return handler(self, *args, **kwargs)
 
-        with tracer.trace(
-            "http.request",
-            resource=request_resource(self.command, path),
-            span_type="web",
-        ) as span:
-            span.set_tag("http.method", self.command)
-            span.set_tag("http.url", path)
-            span.set_tag("http.client_ip", self.client_address[0])
-            return handler(self, *args, **kwargs)
+        # Prometheus: track requests in progress
+        http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
+
+        try:
+            # Prometheus: measure request duration
+            with http_request_duration_seconds.labels(method=method, endpoint=endpoint).time():
+                return handler(self, *args, **kwargs)
+        finally:
+            # Prometheus: decrement in-progress counter
+            http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
 
     return wrapper
 
@@ -87,11 +114,17 @@ class ContactHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
 
     def send_response(self, code, message=None):
-        span = tracer.current_span()
-        if span is not None:
-            span.set_tag("http.status_code", code)
-            if code >= HTTPStatus.INTERNAL_SERVER_ERROR:
-                span.error = 1
+        # Prometheus: count HTTP requests by status
+        path = urlparse(self.path).path
+        if path != "/api/health" and path != "/metrics":
+            method = self.command
+            endpoint = request_resource(method, path)
+            http_requests_total.labels(
+                method=method,
+                endpoint=endpoint,
+                status=code
+            ).inc()
+
         super().send_response(code, message)
 
     def send_json(self, payload, status=HTTPStatus.OK):
@@ -152,7 +185,18 @@ class ContactHandler(SimpleHTTPRequestHandler):
             self.send_json({"status": "ok"})
             return
 
+        if path == "/metrics":
+            # Prometheus metrics endpoint
+            metrics = generate_latest()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+            self.send_header("Content-Length", str(len(metrics)))
+            self.end_headers()
+            self.wfile.write(metrics)
+            return
+
         if path == "/api/contacts":
+            db_operations_total.labels(operation='SELECT', table='contacts').inc()
             with get_connection() as connection:
                 contacts = connection.execute(
                     "SELECT id, name, phone, created_at FROM contacts ORDER BY name COLLATE NOCASE"
@@ -174,11 +218,13 @@ class ContactHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
                 return
 
+            db_operations_total.labels(operation='INSERT', table='contacts').inc()
             with get_connection() as connection:
                 cursor = connection.execute(
                     "INSERT INTO contacts (name, phone) VALUES (?, ?)",
                     (contact["name"], contact["phone"]),
                 )
+                db_operations_total.labels(operation='SELECT', table='contacts').inc()
                 created = connection.execute(
                     "SELECT id, name, phone, created_at FROM contacts WHERE id = ?",
                     (cursor.lastrowid,),
@@ -192,11 +238,13 @@ class ContactHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
                 return
 
+            db_operations_total.labels(operation='INSERT', table='feedback').inc()
             with get_connection() as connection:
                 cursor = connection.execute(
                     "INSERT INTO feedback (email, message) VALUES (?, ?)",
                     (feedback["email"], feedback["message"]),
                 )
+                db_operations_total.labels(operation='SELECT', table='feedback').inc()
                 created = connection.execute(
                     "SELECT id, email, message, created_at FROM feedback WHERE id = ?",
                     (cursor.lastrowid,),
@@ -218,6 +266,7 @@ class ContactHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
             return
 
+        db_operations_total.labels(operation='UPDATE', table='contacts').inc()
         with get_connection() as connection:
             cursor = connection.execute(
                 "UPDATE contacts SET name = ?, phone = ? WHERE id = ?",
@@ -226,6 +275,7 @@ class ContactHandler(SimpleHTTPRequestHandler):
             if cursor.rowcount == 0:
                 self.send_json({"error": "Contato não encontrado."}, HTTPStatus.NOT_FOUND)
                 return
+            db_operations_total.labels(operation='SELECT', table='contacts').inc()
             updated = connection.execute(
                 "SELECT id, name, phone, created_at FROM contacts WHERE id = ?",
                 (contact_id,),
@@ -239,6 +289,7 @@ class ContactHandler(SimpleHTTPRequestHandler):
             self.send_json({"error": "Rota não encontrada."}, HTTPStatus.NOT_FOUND)
             return
 
+        db_operations_total.labels(operation='DELETE', table='contacts').inc()
         with get_connection() as connection:
             cursor = connection.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
             if cursor.rowcount == 0:

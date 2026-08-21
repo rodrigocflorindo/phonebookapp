@@ -1,1 +1,1 @@
-ddtrace>=3,<4
+prometheus-client>=0.20,<1

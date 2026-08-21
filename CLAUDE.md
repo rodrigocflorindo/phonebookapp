@@ -9,11 +9,11 @@ Phonebook App is a simple web-based contact management application that allows u
 - **Backend**: Python 3.12 HTTP server (`app.py`) serving static files and a REST API
 - **Frontend**: Vanilla HTML, CSS, JavaScript in `static/` directory
 - **Database**: SQLite database (`contacts.db`) with a single `contacts` table
-- **Monitoring**: Datadog APM integration via `ddtrace` for distributed tracing
+- **Monitoring**: Prometheus metrics for HTTP requests, latency, and database operations
 
 ## Architecture
 
-The application uses Python's `SimpleHTTPRequestHandler` to serve both static files and handle API requests. All API routes are prefixed with `/api/`. The backend uses a custom `traced_request` decorator to instrument HTTP requests with Datadog APM spans, excluding `/api/health` from tracing to avoid noise from probes.
+The application uses Python's `SimpleHTTPRequestHandler` to serve both static files and handle API requests. All API routes are prefixed with `/api/`. The backend uses a custom `traced_request` decorator to instrument HTTP requests with Prometheus metrics, excluding `/api/health` and `/metrics` from detailed tracking to avoid noise.
 
 **Database schema**:
 ```sql
@@ -36,7 +36,7 @@ CREATE TABLE feedback (
 - Single-file Python application using standard library HTTP server with threading support
 - SQLite with `row_factory = sqlite3.Row` to return dictionary-like rows
 - Validation happens both client-side (JavaScript) and server-side (Python)
-- Datadog tracing is patched at module level with `patch(sqlite3=True)`
+- Prometheus metrics exposed at `/metrics` endpoint for monitoring
 
 ## Development Commands
 
@@ -164,32 +164,22 @@ Validation errors return HTTP 400 with JSON error messages.
 
 - `DATABASE_PATH`: Path to SQLite database file (default: `data/contacts.db`)
 - `PORT`: HTTP server port (default: `3000`)
-- `DD_AGENT_HOST`: Datadog Agent hostname (set to `host.docker.internal` in Docker Compose)
-- `DD_ENV`: Environment tag for Datadog (e.g., `local`)
-- `DD_SERVICE`: Service name for Datadog APM (`phonebookapp`)
-- `DD_VERSION`: Version tag for Datadog (e.g., `1.1.1`)
-- `DD_LOGS_INJECTION`: Enable log correlation (`true`)
-- `DD_TRACE_SAMPLE_RATE`: Trace sampling rate (`1.0` for 100%)
 
-## Datadog APM
+## Prometheus Metrics
 
-The application sends traces to Datadog APM. After generating traffic, filter traces in Datadog:
-```
-service:phonebookapp env:local
-```
+The application exposes metrics at the `/metrics` endpoint in Prometheus format. Available metrics:
 
-To verify trace reception in the Kubernetes cluster:
+- `phonebookapp_http_requests_total`: Counter of HTTP requests by method, endpoint, and status
+- `phonebookapp_http_request_duration_seconds`: Histogram of HTTP request latency
+- `phonebookapp_http_requests_in_progress`: Gauge of currently processing HTTP requests
+- `phonebookapp_db_operations_total`: Counter of database operations by operation type and table
+
+To view metrics:
 ```bash
-kubectl exec -n default daemonset/datadog-agent -c agent -- agent status
+curl http://localhost:3001/metrics
 ```
 
-Check the `APM Agent` section for non-zero `Traces` counter.
-
-**Trace resource naming**:
-- `GET /api/contacts` → resource: `GET /api/contacts`
-- `PUT /api/contacts/123` → resource: `PUT /api/contacts/{id}`
-- `POST /api/feedback` → resource: `POST /api/feedback`
-- `GET /api/health` → not traced (excluded from instrumentation)
+The metrics are automatically scraped by Prometheus every 15 seconds when deployed to Kubernetes (via the `prometheus.io/scrape` annotation)
 
 ## Testing
 
